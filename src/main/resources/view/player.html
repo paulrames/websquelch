@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>websquelch</title>
+		<script type="text/javascript" src="knockout-min-3.4.2.js"></script>
+		<link rel="stylesheet" type="text/css" href="style.css" />
+	</head>
+	<body>
+		<header>
+			<h1>websquelch</h1>
+			<div class="autoplay">
+				<span class="label">Autoplay</span>
+				<div class="toggle" data-bind="css: {enabled: autoplay}, click: toggleAutoplay">
+					<div class="knob"></div>
+				</div>
+			</div>
+		</header>
+		<ol id="playlist" data-bind="foreach: songs">
+			<li data-bind="text: title, click: $root.click, css: {'current-song': $data === $root.currentSong()}"></li>
+		</ol>
+		<footer>
+			<audio id="player" autoplay="autoplay" controls="controls" data-bind="event: {ended: ended, error: ended}, attr: {src: currentSong() ? 'song/' + currentSong().src : undefined}"></audio>
+		</footer>
+		<script type="text/javascript">
+			function AppViewModel() {
+				var self = this;
+				var player = document.getElementById("player");
+				self.songs = ko.observableArray();
+				self.autoplay = ko.observable(false);
+				self.currentSong = ko.observable();
+				self.click = function(data) {
+					self.currentSong(data);
+					player.play();
+				};
+				self.toggleAutoplay = function() {
+					// Mobile browsers need user interaction for autoplay to
+					// work, so we enable it here when the switch is toggled
+					if (!self.currentSong()) {
+						player.play();
+					}
+					self.autoplay(!self.autoplay());
+				}
+				self.newSong = function(song) {
+					self.songs.push(song);
+					if (self.autoplay() && !self.currentSong()) {
+						self.currentSong(song);
+					}
+				}
+				self.ended = function() {
+					var index = self.songs().indexOf(self.currentSong());
+					if (index >= 0 && self.autoplay() && self.songs().length -1 > index) {
+						var nextSong = self.songs()[index + 1];
+						if (nextSong) {
+							self.currentSong(nextSong);
+						}
+					} else {
+						self.currentSong(null);
+						player.load();
+					}
+				}
+			}
+			var viewModel = new AppViewModel();
+			ko.applyBindings(viewModel);
+			// Load the initial playlist and set up SSE for new songs updates
+			var xmlhttp = new XMLHttpRequest();
+			xmlhttp.open('GET', 'songs', true);
+			xmlhttp.onreadystatechange = function() {
+			    if (xmlhttp.readyState == 4) {
+			        if (xmlhttp.status == 200) {
+			            var data = JSON.parse(xmlhttp.responseText);
+			            viewModel.songs(data);
+			            if (window.EventSource) {
+					        var source = new EventSource("sse");
+					        source.onmessage = function(event) {
+					        	var song = JSON.parse(event.data);
+					        	viewModel.newSong(song);
+					        };
+					        source.onerror = function(e) {
+					        	alert("Oops! Something went wrong with Server-Sent Events");
+					        };
+					    } else {
+					        alert("This browser does not support Server-Sent Events. The playlist will not be updated automatically");
+					    }
+			         }
+			    }
+			};
+			xmlhttp.send(null);
+		</script>
+	</body>
+</html>
