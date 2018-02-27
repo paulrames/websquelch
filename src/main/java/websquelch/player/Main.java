@@ -1,15 +1,20 @@
 package websquelch.player;
 
 import java.io.FileNotFoundException;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+
+import javax.net.ssl.SSLContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.undertow.Handlers;
 import io.undertow.Undertow;
+import io.undertow.Undertow.Builder;
+import io.undertow.Undertow.ListenerInfo;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.sse.ServerSentEventConnection;
@@ -17,6 +22,7 @@ import io.undertow.server.handlers.sse.ServerSentEventConnectionCallback;
 import io.undertow.server.handlers.sse.ServerSentEventHandler;
 import websquelch.player.handlers.RequestHandler;
 import websquelch.player.handlers.auth.BasicAuth;
+import websquelch.player.handlers.ssl.SSLContextFactory;
 import websquelch.player.watcher.DirectoryWatcher;
 
 public class Main {
@@ -44,7 +50,7 @@ public class Main {
 		DirectoryWatcher watcher = new DirectoryWatcher(baseDir);
 		watcher.addListener(squelchHandler);
 		watcher.start();
-		Undertow server = Undertow.builder().addHttpListener(params.getPort(), "localhost")
+		Undertow server = createListener(params, Undertow.builder())
 				.setHandler(addSecurity(params, Handlers.path()
 				.addPrefixPath("/songs", squelchHandler)
 				.addPrefixPath("/song", squelchHandler)
@@ -55,7 +61,21 @@ public class Main {
 				.build();
 		server.start();
 		log.info("Base directory = {}", baseDir.toAbsolutePath());
-		log.info("Server started on port {}", params.getPort());
+		for (ListenerInfo info : server.getListenerInfo()) {
+			InetSocketAddress address = (InetSocketAddress) info.getAddress();
+			log.info("Server started on {} port {}", address.getHostString(), address.getPort());
+		}
+	}
+	
+	private static Builder createListener(Parameters params, Builder builder) throws Exception {
+		if (params.getKeystoreDir() != null && params.getKeystorePassword() != null
+				&& params.getKeyPassword() != null) {
+			SSLContext sslContext = SSLContextFactory.createSSLContext(params.getKeystoreDir(),
+					params.getKeystorePassword(), params.getKeyPassword());
+			return builder.addHttpsListener(getPort(params), getBindAddress(params), sslContext);
+		} else {
+			return builder.addHttpListener(getPort(params), getBindAddress(params));
+		}
 	}
 	
 	private static HttpHandler addSecurity(Parameters params, HttpHandler handler) {
@@ -64,6 +84,14 @@ public class Main {
 		} else {
 			return handler;
 		}
+	}
+	
+	private static String getBindAddress(Parameters params) {
+		return params.getBindAddress() != null ? params.getBindAddress() : "0.0.0.0";
+	}
+	
+	private static int getPort(Parameters params) {
+		return params.getPort() != null ? params.getPort() : 8080;
 	}
 	
 }
