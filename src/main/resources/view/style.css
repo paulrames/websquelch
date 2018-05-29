@@ -74,7 +74,8 @@ ol#playlist {
 	right: 20px;
 }
 
-ol#playlist li {
+ol#playlist > li {
+	position: relative;
 	cursor: pointer;
 	margin: 0;
 	padding: 15px 5px;
@@ -84,6 +85,24 @@ ol#playlist li {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+ol#playlist li.new::after {
+	content: "New";
+	position: absolute;
+	right: 20px;
+	font-family: sans-serif;
+	font-size: 14px;
+	font-weight: bold;
+	background-color: red;
+	color: white;
+	text-align: center;
+	text-indent: 0;
+	text-transform: lowercase;
+	text-shadow: 1px 1px 1px black;
+	box-shadow: 1px 1px 2px #333;
+	padding: 3px 10px;
+	margin-top: -3px;
 }
 
 ol#playlist li:last-child {

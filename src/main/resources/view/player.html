@@ -18,7 +18,7 @@
 			</div>
 		</header>
 		<ol id="playlist" data-bind="foreach: songs">
-			<li data-bind="text: title, click: $root.click, css: {'current-song': $data === $root.currentSong()}"></li>
+			<li data-bind="text: title, click: $root.click, css: {'current-song': $data === $root.currentSong(), 'new': $data.isNew}"></li>
 		</ol>
 		<footer>
 			<audio id="player" autoplay="autoplay" controls="controls" data-bind="event: {ended: ended, error: ended}, attr: {src: currentSong() ? 'song/' + currentSong().src : undefined}"></audio>
@@ -30,8 +30,12 @@
 				self.songs = ko.observableArray();
 				self.autoplay = ko.observable(false);
 				self.currentSong = ko.observable();
+				self.setCurrentSong = function(song) {
+					song.isNew = false;
+					self.currentSong(song);
+				};
 				self.click = function(data) {
-					self.currentSong(data);
+					self.setCurrentSong(data);
 					player.play();
 				};
 				self.toggleAutoplay = function() {
@@ -45,7 +49,7 @@
 				self.newSong = function(song) {
 					self.songs.push(song);
 					if (self.autoplay() && !self.currentSong()) {
-						self.currentSong(song);
+						self.setCurrentSong(song);
 					}
 				}
 				self.ended = function() {
@@ -53,7 +57,7 @@
 					if (index >= 0 && self.autoplay() && self.songs().length -1 > index) {
 						var nextSong = self.songs()[index + 1];
 						if (nextSong) {
-							self.currentSong(nextSong);
+							self.setCurrentSong(nextSong);
 						}
 					} else {
 						self.currentSong(null);
@@ -75,6 +79,7 @@
 					        var source = new EventSource("sse");
 					        source.onmessage = function(event) {
 					        	var song = JSON.parse(event.data);
+					        	song.isNew = true;
 					        	viewModel.newSong(song);
 					        };
 					        source.onerror = function(e) {
