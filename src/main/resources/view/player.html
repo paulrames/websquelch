@@ -18,7 +18,7 @@
 			</div>
 		</header>
 		<ol id="playlist" data-bind="foreach: songs">
-			<li data-bind="text: title, click: $root.click, css: {'current-song': $data === $root.currentSong(), 'new': $data.isNew}"></li>
+			<li data-bind="text: title, click: $root.click, css: {'current-song': $data == $root.currentSong(), 'new': $data.isNew, 'dir': $data.type == 'dir'}"></li>
 		</ol>
 		<footer>
 			<audio id="player" autoplay="autoplay" controls="controls" data-bind="event: {ended: ended, error: ended}, attr: {src: currentSong() ? 'song/' + currentSong().src : undefined}"></audio>
@@ -29,14 +29,21 @@
 				var player = document.getElementById("player");
 				self.songs = ko.observableArray();
 				self.autoplay = ko.observable(false);
+				self.currentDir = ko.observable(null);
 				self.currentSong = ko.observable();
 				self.setCurrentSong = function(song) {
 					song.isNew = false;
 					self.currentSong(song);
 				};
 				self.click = function(data) {
-					self.setCurrentSong(data);
-					player.play();
+					if (data.type == "file") {
+						self.setCurrentSong(data);
+						player.play();
+					} else {
+						player.pause();
+						self.currentSong(null);
+						list(data.src);
+					}
 				};
 				self.toggleAutoplay = function() {
 					// Mobile browsers need user interaction for autoplay to
@@ -47,15 +54,21 @@
 					self.autoplay(!self.autoplay());
 				}
 				self.newSong = function(song) {
-					self.songs.push(song);
-					if (self.autoplay() && !self.currentSong()) {
-						self.setCurrentSong(song);
+					if (song.type == "file") {
+						song.isNew = true;
+						if (self.autoplay() && !self.currentSong()) {
+							self.setCurrentSong(song);
+						}
 					}
-				}
+					self.songs.push(song);
+				};
 				self.ended = function() {
-					var index = self.songs().indexOf(self.currentSong());
-					if (index >= 0 && self.autoplay() && self.songs().length -1 > index) {
-						var nextSong = self.songs()[index + 1];
+					var songs = self.songs().filter(function(song) {
+						return song.type == "file";
+					});
+					var index = songs.indexOf(self.currentSong());
+					if (index >= 0 && self.autoplay() && songs.length -1 > index) {
+						var nextSong = songs[index + 1];
 						if (nextSong) {
 							self.setCurrentSong(nextSong);
 						}
@@ -63,35 +76,47 @@
 						self.currentSong(null);
 						player.load();
 					}
-				}
-			}
+				};
+			};
+			function list(dir, cb) {
+				var xmlhttp = new XMLHttpRequest();
+				xmlhttp.open("GET", "songs?dir=" + dir, true);
+				xmlhttp.onreadystatechange = function() {
+				    if (xmlhttp.readyState == 4) {
+				        if (xmlhttp.status == 200) {
+				            var data = JSON.parse(xmlhttp.responseText);
+				            viewModel.songs(data);
+				            viewModel.currentDir(dir);
+				            if (cb) {
+				            	cb();
+				            }
+				            var list = document.getElementById("playlist");
+				            list.scrollTop = list.scrollHeight;
+				         }
+				    }
+				};
+				xmlhttp.send(null);
+			};
 			var viewModel = new AppViewModel();
 			ko.applyBindings(viewModel);
 			// Load the initial playlist and set up SSE for new songs updates
-			var xmlhttp = new XMLHttpRequest();
-			xmlhttp.open('GET', 'songs', true);
-			xmlhttp.onreadystatechange = function() {
-			    if (xmlhttp.readyState == 4) {
-			        if (xmlhttp.status == 200) {
-			            var data = JSON.parse(xmlhttp.responseText);
-			            viewModel.songs(data);
-			            if (window.EventSource) {
-					        var source = new EventSource("sse");
-					        source.onmessage = function(event) {
-					        	var song = JSON.parse(event.data);
-					        	song.isNew = true;
-					        	viewModel.newSong(song);
-					        };
-					        source.onerror = function(e) {
-					        	alert("Oops! Something went wrong with Server-Sent Events");
-					        };
-					    } else {
-					        alert("This browser does not support Server-Sent Events. The playlist will not be updated automatically");
-					    }
-			         }
+			list("", function() {
+				if (window.EventSource) {
+			        var source = new EventSource("sse");
+			        source.onmessage = function(event) {
+			        	var song = JSON.parse(event.data);
+			        	var dir = song.src.substr(0, song.src.lastIndexOf("/"));
+			        	if (dir == viewModel.currentDir()) {
+			        		viewModel.newSong(song);
+			        	}
+			        };
+			        source.onerror = function(e) {
+			        	alert("Oops! Something went wrong with Server-Sent Events");
+			        };
+			    } else {
+			        alert("This browser does not support Server-Sent Events. The playlist will not be updated automatically");
 			    }
-			};
-			xmlhttp.send(null);
+			});
 		</script>
 	</body>
 </html>

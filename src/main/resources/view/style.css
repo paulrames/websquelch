@@ -87,6 +87,11 @@ ol#playlist > li {
 	white-space: nowrap;
 }
 
+ol#playlist > li.dir {
+	font-weight: bold;
+	color: darkred;
+}
+
 ol#playlist li.new::after {
 	content: "New";
 	position: absolute;

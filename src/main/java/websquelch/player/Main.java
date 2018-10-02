@@ -17,18 +17,20 @@ import io.undertow.Undertow.Builder;
 import io.undertow.Undertow.ListenerInfo;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
+import io.undertow.server.handlers.resource.PathResourceManager;
+import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.server.handlers.sse.ServerSentEventConnection;
 import io.undertow.server.handlers.sse.ServerSentEventConnectionCallback;
 import io.undertow.server.handlers.sse.ServerSentEventHandler;
+import websquelch.player.fileservice.FileService;
 import websquelch.player.handlers.RequestHandler;
 import websquelch.player.handlers.auth.BasicAuth;
 import websquelch.player.handlers.ssl.SSLContextFactory;
-import websquelch.player.watcher.DirectoryWatcher;
 
 public class Main {
 
 	private static final Logger log = LoggerFactory.getLogger(Main.class);
-	
+
 	public static void main(String[] args) throws Exception {
 		Parameters params = Parameters.parse(args);
 		if (params.isNotValid()) {
@@ -46,10 +48,10 @@ public class Main {
 				connection.setKeepAliveTime(15000);
 			}
 		});
-		RequestHandler squelchHandler = new RequestHandler(baseDir, sseHandler);
-		DirectoryWatcher watcher = new DirectoryWatcher(baseDir);
-		watcher.addListener(squelchHandler);
-		watcher.start();
+		FileService fileService = new FileService(baseDir);
+		ResourceHandler resourceHandler = new ResourceHandler(new PathResourceManager(baseDir));
+		RequestHandler squelchHandler = new RequestHandler(fileService, resourceHandler, sseHandler);
+		fileService.startMonitoring(squelchHandler);
 		Undertow server = createListener(params, Undertow.builder())
 				.setHandler(addSecurity(params, Handlers.path()
 				.addPrefixPath("/songs", squelchHandler)
@@ -66,7 +68,7 @@ public class Main {
 			log.info("Server started on {} port {}", address.getHostString(), address.getPort());
 		}
 	}
-	
+
 	private static Builder createListener(Parameters params, Builder builder) throws Exception {
 		if (params.getKeystoreDir() != null && params.getKeystorePassword() != null
 				&& params.getKeyPassword() != null) {
@@ -77,7 +79,7 @@ public class Main {
 			return builder.addHttpListener(getPort(params), getBindAddress(params));
 		}
 	}
-	
+
 	private static HttpHandler addSecurity(Parameters params, HttpHandler handler) {
 		if (params.getUsername() != null && params.getPassword() != null) {
 			return BasicAuth.wrap(handler, params.getUsername(), params.getPassword());
@@ -85,13 +87,13 @@ public class Main {
 			return handler;
 		}
 	}
-	
+
 	private static String getBindAddress(Parameters params) {
 		return params.getBindAddress() != null ? params.getBindAddress() : "0.0.0.0";
 	}
-	
+
 	private static int getPort(Parameters params) {
 		return params.getPort() != null ? params.getPort() : 8080;
 	}
-	
+
 }
